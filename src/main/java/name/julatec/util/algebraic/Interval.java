@@ -1,5 +1,7 @@
 package name.julatec.util.algebraic;
 
+import java.util.function.Function;
+
 /**
  * This class represents a 1D interval for the Sorted Set T.
  *
@@ -89,6 +91,29 @@ public class Interval<T extends Comparable<T>> {
             return true;
         }
         return lowerTest < 0 && upperTest > 0;
+    }
+
+    /**
+     * Provides a projection function that scales using linear Scale from the source interval to the target interval.
+     *
+     * @param source  source interval to scale.
+     * @param target  target interval to scale.
+     * @param mapping maps from reals to target interval.
+     * @param <N>     Type of the source interval.
+     * @param <M>     Type of the target interval.
+     * @return linear scalar function from source interval to target interval.
+     */
+    public static <N extends Number & Comparable<N>, M extends Number & Comparable<M>> Function<N, M> scale(
+            Interval<N> source,
+            Interval<M> target,
+            Function<Double, M> mapping) {
+        final double sourceRange = source.upper.doubleValue() - source.lower.floatValue();
+        final double targetRange = target.upper.doubleValue() - target.lower.floatValue();
+        return n -> {
+            double doubleValue = target.lower.doubleValue() +
+                    targetRange * ((n.doubleValue() - source.lower.doubleValue()) / sourceRange);
+            return mapping.apply(doubleValue);
+        };
     }
 
     @Override

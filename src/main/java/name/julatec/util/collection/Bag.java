@@ -3,10 +3,11 @@ package name.julatec.util.collection;
 import org.apache.commons.lang3.builder.ToStringBuilder;
 import org.apache.commons.lang3.builder.ToStringStyle;
 
-import java.util.Iterator;
-import java.util.Map;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.function.BinaryOperator;
+import java.util.function.Function;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 /**
  * Defines a collection that "counts" the number of times a key object appears in the collection. In this case, the count
@@ -38,6 +39,25 @@ public class Bag<K extends Comparable<K>, V> implements Iterable<Map.Entry<K, V>
         this.add = add;
         this.target = new TreeMap<>();
     }
+
+    /**
+     * Gets the operator that defines this instance.
+     *
+     * @return instance operator.
+     */
+    public BinaryOperator<V> getOperator() {
+        return add;
+    }
+
+    /**
+     * Returns an unmodifiable version of this bag.
+     *
+     * @return navigable version of the current bag.
+     */
+    public NavigableMap<K, V> toNavigableMap() {
+        return java.util.Collections.unmodifiableNavigableMap(target);
+    }
+
 
     @Override
     public Iterator<Map.Entry<K, V>> iterator() {
@@ -109,10 +129,58 @@ public class Bag<K extends Comparable<K>, V> implements Iterable<Map.Entry<K, V>
         return this.target.size();
     }
 
+    /**
+     * Summarizes this instance using a Stream collector
+     *
+     * @param collector to use to summarize the data.
+     * @param <U>       Summary type.
+     * @return result of the collect operation.
+     */
+    public <U> U collect(Collector<Map.Entry<K, V>, ?, U> collector) {
+        return target.entrySet().stream().collect(collector);
+    }
+
+    /**
+     * Creates a Bag Collector using the given binary operator.
+     *
+     * @param add operator to combine two given values.
+     * @param <K> Key type.
+     * @param <V> value type.
+     * @return a new Bag Collector.
+     */
+    public static <K extends Comparable<K>, V>
+    Collector<Map.Entry<K, V>, ?, Bag<K, V>>
+    collect(BinaryOperator<V> add) {
+        return Collector.of(
+                () -> new Bag<>(add),
+                Bag::add,
+                Bag::merge);
+    }
+
+    /**
+     * Transforms the values of this instance using the given function.
+     *
+     * @param function function to apply to the values
+     * @param <R>      target type of the function.
+     * @return a map containing the mapped values.
+     */
+    public <R> NavigableMap<K, R> mapValues(Function<V, R> function) {
+        return target
+                .entrySet()
+                .stream()
+                .map(kvEntry -> Map.entry(kvEntry.getKey(), function.apply(kvEntry.getValue())))
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (o, o2) -> o,
+                        TreeMap::new));
+    }
+
     @Override
     public String toString() {
         final ToStringBuilder stringBuilder = new ToStringBuilder(this, ToStringStyle.JSON_STYLE);
         target.forEach((k, v) -> stringBuilder.append(String.valueOf(k), v));
         return stringBuilder.toString();
     }
+
 }
