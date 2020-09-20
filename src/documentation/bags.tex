@@ -1,0 +1,234 @@
+\documentclass{article}
+\usepackage[utf8x]{inputenc}
+\usepackage[english]{babel}
+\usepackage[hyphens]{url}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage[margin=0.5in]{geometry}
+\usepackage{amsthm}
+\usepackage{centernot}
+\usepackage{verbatim}
+\bibliographystyle{plain}
+
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{definition}{Definition}
+
+\newcommand*{\fullref}[1]{\hyperref[{#1}]{\autoref*{#1} \nameref*{#1}}}
+
+\title{Bags, generalisation of a Multi-Set \\
+{\small Annotation Processor and the Adapter Design Pattern}}
+\author{J Ulate C}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Sets, the old friends}
+
+One of the old and reliable data structures that use very often are \textit{Sets}. It relies on the basic mathematical notion of a group of elements without order and no repetition. We are not going to go deeper on this since it is a widespread concept. If we want a count of the copies of an item, we end up with a concept known as Multi-Set. There is simple useful implementation provided by project Apache, \texttt{org.apache.commons.collections4.MultiSet<E>}.
+
+\section{Can we generalise it?}
+
+The main \textit{limitation} that the Multi-Set has, is that its domain is limited to whole numbers. For example, if we have a fractional numbers domain or time delta units such as minutes or hours. An integer would not represent the concept that we might require. Before jumping into the central idea of this article, we need to remember the \nameref{def:magma} concept.
+
+\begin{definition}[\textit{magma}]{magma}
+\label{def:magma}
+A \nameref{def:magma} is a set $M$ matched with an operation, $\cdot$, that sends any two elements $a, b \in M$ to another element, $a \cdot b$. We can use the symbol $\cdot$ to represent the operation, but it is a general placeholder for a properly defined operation. The only requirement to qualify as magma, the set and operation $(M, \cdot)$ must satisfy the following requirement (known as the magma or closure axiom) \cite{Suschkewitsch1929OnLaw, Hausmann1937TheoryQuasi-Groups}:
+For all $a, b \in M$, the result of the operation $a \cdot b$ is also in $M$.
+And in mathematical notation:
+\begin{equation}
+a,b \in M \Rightarrow a \cdot b \in M
+\end{equation}
+Probably a \nameref{def:magma} is the simplest algebraic structure. When we translate this to code, we ended up with a function such as \texttt{java.util.function.BinaryOperator<T>}.
+\end{definition}
+
+Additionally, we require a data structure where we can store the results. In this case a \textit{Dictionary} is ideal for our case. As a personal taste we prefer \texttt{java.util.TreeMap<K, V>}. We do not require the ordering properties and constraints of the \texttt{TreeMap} at this moment, but they will be useful in the future.
+
+With these two ingredients we can define the \texttt{Bag<K, V>} data structure. Let us start with the type constraints:
+
+\begin{itemize}
+    \item \texttt{K}, the key type is the target class that will identify the values that we are aggregating. In order to use a \texttt{TreeMap} as underlying data structure we require that \texttt{K} is Partial Ordered Set by implementing the \texttt{Comparator<K>} interface.
+    \item \texttt{V}, the value types is the class, in this case set type, that is part of the definition of the
+    $(V, add)$ \nameref{def:magma}.
+\end{itemize}
+
+\begin{lstlisting}[
+label=lst:bag-fields,
+language=Java,
+caption={\texttt{Bag} minimal fields}]
+public class Bag<K extends Comparable<K>, V> implements Iterable<Map.Entry<K, V>> {
+    private final TreeMap<K, V> target;
+    private final BinaryOperator<V> add;
+    public Bag(BinaryOperator<V> add) {
+        this.add = add;
+        this.target = new TreeMap<>();
+    }
+}
+\end{lstlisting}
+
+Once we have these initial definition we can write something like \fullref{lst:bag-fields}. Now, we can work on the definition of the \texttt{add} method (not the operator). The \fullref{lst:bag-add-method} show us the minimal required implementation for this method. It uses the functionality provided by \href{https://docs.oracle.com/javase/8/docs/api/java/util/Map.html#merge-K-V-java.util.function.BiFunction-}{\texttt{merge}} method of the \texttt{Map} interface.
+
+\begin{lstlisting}[
+label=lst:bag-add-method,
+language=Java,
+caption={\texttt{Bag} add method}]
+public synchronized Bag<K, V> add(K key, V count) {
+    target.merge(key, count, add);
+    return this;
+}
+\end{lstlisting}
+
+In a similar way, when we have two o more bags, we want to combine them. We can create a method \texttt{merge} that provides another \nameref{def:magma}, but in this case defined by $(Bag<K, V>, Bag::merge)$ as it is shown on \fullref{lst:bag-merge-method}.
+
+\begin{lstlisting}[
+label=lst:bag-merge-method,
+language=Java,
+caption={\texttt{Bag} merge method}]
+public Bag<K, V> merge(Bag<K, V> that) {
+    that.forEach(this::add);
+    return this;
+}
+\end{lstlisting}
+
+Finally, we create the other required methods such as \texttt{get} and \texttt{size}. The minimal implementation is show on \fullref{lst:bag-other-method}.
+
+\begin{lstlisting}[
+label=lst:bag-other-method,
+language=Java,
+caption={\texttt{Bag} other methods}]
+public int size() { return this.target.size(); }
+public V get(K key) { return target.get(key); }
+public V getOrElse(K key, V defaultValue) {
+    return target.getOrDefault(key, defaultValue);
+}
+\end{lstlisting}
+
+\section{Aggregations using bags}
+
+The goal of a bag is to perform aggregations. In \fullref{lst:bag-collector-method} we present an implementation of a \texttt{java.util.stream.Collector}.
+
+\begin{lstlisting}[
+label=lst:bag-collector-method,
+language=Java,
+caption={\texttt{Bag} collector method}]
+public static <K extends Comparable<K>, V>
+Collector<Map.Entry<K, V>, ?, Bag<K, V>>
+collect(BinaryOperator<V> add) {
+    return Collector.of(
+            () -> new Bag<>(add), // New Bag Supplier.
+            Bag::add,             // Add new items to a Bag.
+            Bag::merge);          // Merge two bags.
+}
+\end{lstlisting}
+
+\subsection{How to use it}
+
+Think in the query presented in \fullref{lst:sql-sample-1}. If we assume that key is an string and value is an \texttt{BigDecimal} value. We can produce an equivalent result using a collector, \fullref{lst:sql-sample-1-bag-implemenation} provides that example.
+
+\begin{lstlisting}[
+label=lst:sql-sample-1,
+language=SQL,
+caption={Simple \texttt{SQL} aggregation}]
+select key, sum(value) 
+from mytable
+group by key
+order by key
+\end{lstlisting}
+
+
+\begin{lstlisting}[
+label=lst:sql-sample-1-bag-implemenation,
+language=Java,
+caption={\nameref{lst:sql-sample-1} as a \texttt{Bag} implementation}]
+Stream<Map.Entry<String, BigDecimal>> values;
+Bag<String, BigDecimal> aggregation = values.collect(Bag.collect(BigDecimal::add));
+\end{lstlisting}
+
+\subsection{Working example}
+
+If we count with a stream of number in the following way, a column with a group identifier and a second column with some number:
+
+\begin{verbatim}
+G004                  -44
+G006                  -28
+G002                   10
+G005                    2
+G000                   70
+G000                   27
+\end{verbatim}
+
+We can create with few lines of code a console box-plot graph like the following one: 
+
+\verbatiminput{boxplot.txt}
+
+The first step will be the definition of our boxplot. In out case we declare two fields, one \texttt{histogram} for the whole population,  and \texttt{histograms} as map for each group histogram. The \texttt{tee} method is a \textit{partial function} that consumes from any type \texttt{T}, obtain the \texttt{key} and value and updates the histograms. Please see \fullref{lst:boxplot-example1}.
+
+\begin{lstlisting}[
+label=lst:boxplot-example1,
+language=Java,
+caption={\texttt{Boxplot} implementation}]
+public class BoxPlot<K extends Comparable<K>, V extends Comparable<V>> {
+    private final Bag<V, Long> histogram = new Bag<>(Long::sum);
+    private final Bag<K, Bag<V, Long>> histograms = new Bag<>(Bag::merge);
+    public <T> Consumer<T> tee(Function<T, Map.Entry<K, V>> function) {
+        return t -> {
+            final Map.Entry<K, V> entry = function.apply(t);
+            histogram.add(entry.getValue(), 1l);
+            histograms.add(entry.getKey(),
+                    new Bag<V, Long>(Long::sum)
+                            .add(entry.getValue(), 1l));
+        };
+    }
+}
+\end{lstlisting}
+
+Once all the data is collected in histogram, we need to calculate the five-number summaries, in \fullref{lst:five-number-summary-calculation} we present our implementation. 
+
+\begin{lstlisting}[
+label=lst:five-number-summary-calculation,
+language=Java,
+caption={\texttt{FiveNumberSummary} calculation}]
+public static <K extends Comparable<K>, V extends Comparable<V>>
+Optional<FiveNumberSummary<K>> from(
+        NavigableMap<K, V> navigableMap,
+        BinaryOperator<V> sumOperator,
+        BiFunction<Double, V, V> fieldOperator) {
+    if (navigableMap.isEmpty()) {
+        return Optional.empty();
+    }
+    final K min = navigableMap.firstKey();
+    final K max = navigableMap.lastKey();
+    V cumulative = navigableMap.get(min);
+    K lastKey = null;
+    final TreeMap<V, K> cumulativeMap = new TreeMap<>();
+    int count = 0;
+    for (Map.Entry<K, V> kvEntry : navigableMap.entrySet()) {
+        if (count++ > 0) {
+            cumulativeMap.put(cumulative, lastKey);
+            cumulative = sumOperator.apply(cumulative, kvEntry.getValue());
+        }
+        lastKey = kvEntry.getKey();
+    }
+    cumulativeMap.put(cumulative, lastKey);
+    final V sum = cumulative;
+    final K lowerQuartile = cumulativeMap.ceilingEntry(
+    fieldOperator.apply(0.25d, sum)).getValue();
+    final K median = cumulativeMap.ceilingEntry(
+    fieldOperator.apply(0.50d, sum)).getValue();
+    final K upperQuartile = cumulativeMap.ceilingEntry(
+    fieldOperator.apply(0.75d, sum)).getValue();
+    return Optional.of(new FiveNumberSummary<>(
+    min, lowerQuartile, median, upperQuartile, max));
+}
+\end{lstlisting}
+
+
+
+\medskip
+\bibliography{references}
+
+\end{document}
