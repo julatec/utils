@@ -40,7 +40,7 @@ class SortMergeJoinTest {
         ).stream();
         final List<Triple<Integer, String, BigInteger>> result = merger.merge(left, right).collect(Collectors.toList());
         assertArrayEquals(
-                new Triple[]{
+                new Triple<?, ?, ?>[]{
                         Triple.of(1, "A", valueOf(1)),
                         Triple.of(2, "C", valueOf(3)),
                         Triple.of(2, "E", valueOf(1)),
@@ -62,7 +62,7 @@ class SortMergeJoinTest {
         ).stream();
         final List<Triple<Integer, String, BigInteger>> result = merger.merge(left, right).collect(Collectors.toList());
         assertArrayEquals(
-                new Triple[]{
+                new Triple<?, ?, ?>[]{
                         Triple.of(null, "A", valueOf(1)),
                         Triple.of(1, "B", valueOf(3)),
                         Triple.of(2, "C", null),

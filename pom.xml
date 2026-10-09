@@ -44,6 +44,14 @@
                 <version>3.8.0</version>
                 <configuration>
                     <release>11</release>
+                    <showWarnings>true</showWarnings>
+                    <!-- Compilador pedante: todos los avisos de javac, y ninguno se tolera, en código y
+                         en pruebas. Una supresión solo vale con un comentario que diga POR QUÉ el aviso
+                         no aplica. -->
+                    <compilerArgs>
+                        <arg>-Xlint:all</arg>
+                        <arg>-Werror</arg>
+                    </compilerArgs>
                 </configuration>
             </plugin>
         </plugins>

@@ -66,7 +66,7 @@ public class Interval<T extends Comparable<T>> {
      * @return new Interval instance.
      */
     public static <T extends Comparable<T>> Interval<T> of(T lower, boolean lowerOpen, T upper, boolean upperOpen) {
-        return new Interval(lower, lowerOpen, upper, upperOpen);
+        return new Interval<>(lower, lowerOpen, upper, upperOpen);
     }
 
     /**
